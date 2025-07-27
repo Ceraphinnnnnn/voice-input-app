@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>음성 입력 텍스트 필드</title>
+    <title>음성 입력 텍스트 필드 v14</title>
     <style>
         * {
             box-sizing: border-box;
@@ -348,6 +348,7 @@
         let isListening = false;
         let finalTranscript = '';
         let interimTranscript = '';
+        let allTranscript = ''; // 전체 텍스트 저장용 추가
         let startTime = 0;
         let timerInterval;
         let audioContext;
@@ -381,16 +382,15 @@
                     
                     if (event.results[i].isFinal) {
                         finalTranscript += transcript + ' ';
+                        allTranscript += transcript + ' '; // 전체 텍스트에도 추가
                     } else {
-                        interimTranscript += transcript;
+                        interimTranscript = transcript;
                     }
                 }
 
-                // 실시간 텍스트 표시
-                if (finalTranscript + interimTranscript) {
-                    interimTextDiv.textContent = finalTranscript + interimTranscript;
-                    interimTextDiv.classList.add('active');
-                }
+                // 실시간 텍스트 표시 (전체 누적 텍스트 + 현재 임시 텍스트)
+                interimTextDiv.textContent = allTranscript + interimTranscript;
+                interimTextDiv.classList.add('active');
             };
 
             recognition.onerror = (event) => {
@@ -448,14 +448,22 @@
         function stopRecording() {
             isListening = false;
             
-            // 최종 텍스트를 입력 필드에 추가
-            const allText = finalTranscript + interimTranscript;
-            if (allText.trim()) {
+            // 마지막 임시 텍스트도 전체 텍스트에 추가
+            if (interimTranscript) {
+                allTranscript += interimTranscript;
+            }
+            
+            // 전체 텍스트를 입력 필드에 추가
+            if (allTranscript.trim()) {
                 const currentText = textInput.value;
                 textInput.value = currentText ? 
-                    currentText + ' ' + allText.trim() : 
-                    allText.trim();
+                    currentText + ' ' + allTranscript.trim() : 
+                    allTranscript.trim();
                 showSuccess('음성 입력이 완료되었습니다.');
+                
+                // 커서를 끝으로 이동
+                textInput.focus();
+                textInput.setSelectionRange(textInput.value.length, textInput.value.length);
             }
             
             // UI 초기화
@@ -486,6 +494,7 @@
             // 변수 초기화
             finalTranscript = '';
             interimTranscript = '';
+            allTranscript = '';
         }
 
         // 타이머 업데이트
@@ -570,6 +579,7 @@
             // 이전 텍스트 초기화
             finalTranscript = '';
             interimTranscript = '';
+            allTranscript = '';
 
             try {
                 // 마이크 권한 확인
