@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>음성 입력 텍스트 필드 v16</title>
+    <title>음성 입력 텍스트 필드 v18</title>
     <style>
         * {
             box-sizing: border-box;
@@ -277,7 +277,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>음성 입력 테스트 v16</h1>
+        <h1>음성 입력 테스트 v18</h1>
         
         <div class="status-message" id="statusMessage"></div>
         
@@ -372,24 +372,27 @@
                 let interimTranscript = '';
                 let currentFinal = '';
                 
+                // 모든 결과를 처리
                 for (let i = 0; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
                     
                     if (event.results[i].isFinal) {
                         currentFinal += transcript + ' ';
                     } else {
-                        interimTranscript += transcript;
+                        interimTranscript = transcript;
                     }
                 }
-                
-                // 현재까지의 전체 텍스트 표시
-                const displayText = finalText + currentFinal + interimTranscript;
-                interimTextDiv.textContent = displayText || '음성을 입력하세요...';
                 
                 // 최종 텍스트 업데이트
                 if (currentFinal) {
                     finalText += currentFinal;
                 }
+                
+                // 현재까지의 전체 텍스트 표시
+                const displayText = finalText + interimTranscript;
+                interimTextDiv.textContent = displayText || '음성을 입력하세요...';
+                
+                console.log('인식된 텍스트:', displayText);
             };
 
             recognition.onerror = (event) => {
@@ -479,28 +482,6 @@
                 recognition.stop();
             }
             
-            // 최종 텍스트 저장
-            const currentText = interimTextDiv.textContent;
-            if (currentText && currentText !== '음성을 입력하세요...') {
-                const existingText = textInput.value;
-                textInput.value = existingText ? 
-                    existingText + ' ' + currentText : 
-                    currentText;
-                
-                // 커서를 끝으로 이동
-                textInput.focus();
-                textInput.setSelectionRange(textInput.value.length, textInput.value.length);
-                
-                showSuccess('음성 입력이 완료되었습니다.');
-            }
-            
-            // UI 초기화
-            textInput.classList.remove('recording');
-            micButton.classList.remove('recording');
-            recordingUI.classList.remove('active');
-            interimTextDiv.classList.remove('active');
-            interimTextDiv.textContent = '';
-            
             // 타이머 중지
             if (timerInterval) {
                 clearInterval(timerInterval);
@@ -510,7 +491,36 @@
             // 오디오 시각화 중지
             stopAudioVisualization();
             
+            // 현재 표시된 텍스트를 가져오기
+            const currentDisplayText = interimTextDiv.textContent;
+            
+            // UI 초기화 (텍스트 저장 전에 먼저 UI를 정리)
+            textInput.classList.remove('recording');
+            micButton.classList.remove('recording');
+            recordingUI.classList.remove('active');
+            interimTextDiv.classList.remove('active');
+            
+            // 최종 텍스트 저장
+            if (currentDisplayText && currentDisplayText !== '음성을 입력하세요...') {
+                const existingText = textInput.value;
+                const newText = existingText ? 
+                    existingText + ' ' + currentDisplayText : 
+                    currentDisplayText;
+                
+                textInput.value = newText;
+                
+                // 커서를 끝으로 이동
+                textInput.focus();
+                textInput.setSelectionRange(textInput.value.length, textInput.value.length);
+                
+                showSuccess('음성 입력이 완료되었습니다.');
+                console.log('저장된 텍스트:', currentDisplayText);
+            } else {
+                console.log('저장할 텍스트가 없습니다.');
+            }
+            
             // 변수 초기화
+            interimTextDiv.textContent = '';
             finalText = '';
         }
 
