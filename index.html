@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>음성 입력 텍스트 필드 v15</title>
+    <title>음성 입력 텍스트 필드 v16</title>
     <style>
         * {
             box-sizing: border-box;
@@ -255,20 +255,6 @@
             margin-left: 20px;
         }
 
-        /* 디버그 정보 */
-        .debug-info {
-            background: #f5f5f5;
-            padding: 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            margin-top: 10px;
-            display: none;
-        }
-
-        .debug-info.active {
-            display: block;
-        }
-
         /* 모바일 최적화 */
         @media (max-width: 480px) {
             body {
@@ -291,7 +277,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>음성 입력 테스트 v15</h1>
+        <h1>음성 입력 테스트 v16</h1>
         
         <div class="status-message" id="statusMessage"></div>
         
@@ -344,16 +330,13 @@
                 <li>화살표 버튼(↑)을 눌러 입력 완료</li>
             </ul>
         </div>
-        
-        <div class="debug-info" id="debugInfo"></div>
-        <button onclick="document.getElementById('debugInfo').classList.toggle('active')" style="margin-top: 10px; font-size: 12px;">디버그 정보 표시</button>
     </div>
 
     <script>
-        // 음성 인식 API 지원 확인
+        // 음성 인식 API 확인
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         
-        // 요소 선택
+        // DOM 요소
         const textInput = document.getElementById('textInput');
         const micButton = document.getElementById('micButton');
         const recordingUI = document.getElementById('recordingUI');
@@ -362,72 +345,58 @@
         const statusMessage = document.getElementById('statusMessage');
         const recordingTime = document.getElementById('recordingTime');
         const voiceBars = document.querySelectorAll('.voice-bar');
-        const debugInfo = document.getElementById('debugInfo');
 
-        // 상태 변수
+        // 전역 변수
         let recognition = null;
         let isRecording = false;
-        let shouldRestart = true;
-        let accumulatedText = '';  // 누적된 텍스트
-        let currentInterim = '';    // 현재 임시 텍스트
+        let finalText = '';
         let startTime = 0;
         let timerInterval = null;
         let audioContext = null;
         let analyser = null;
-        let microphone = null;
-        let dataArray = null;
         let animationId = null;
 
-        // 디버그 로그
-        function debug(message) {
-            console.log(message);
-            const time = new Date().toLocaleTimeString();
-            debugInfo.innerHTML = `[${time}] ${message}<br>` + debugInfo.innerHTML;
-        }
-
         // 음성 인식 초기화
-        function initSpeechRecognition() {
+        function initRecognition() {
             if (!SpeechRecognition) {
                 showError('이 브라우저는 음성 인식을 지원하지 않습니다.');
-                return;
+                return false;
             }
 
             recognition = new SpeechRecognition();
             recognition.lang = 'ko-KR';
-            recognition.continuous = true;
+            recognition.continuous = false;  // false로 변경하여 안정성 향상
             recognition.interimResults = true;
-            recognition.maxAlternatives = 1;
-
-            recognition.onstart = () => {
-                debug('음성 인식 시작됨');
-                isRecording = true;
-                shouldRestart = true;
-                startRecordingUI();
-            };
 
             recognition.onresult = (event) => {
-                let interim = '';
+                let interimTranscript = '';
+                let currentFinal = '';
                 
-                for (let i = event.resultIndex; i < event.results.length; i++) {
+                for (let i = 0; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
                     
                     if (event.results[i].isFinal) {
-                        accumulatedText += transcript + ' ';
-                        debug(`최종 텍스트: ${transcript}`);
+                        currentFinal += transcript + ' ';
                     } else {
-                        interim = transcript;
+                        interimTranscript += transcript;
                     }
                 }
                 
-                currentInterim = interim;
-                updateInterimText();
+                // 현재까지의 전체 텍스트 표시
+                const displayText = finalText + currentFinal + interimTranscript;
+                interimTextDiv.textContent = displayText || '음성을 입력하세요...';
+                
+                // 최종 텍스트 업데이트
+                if (currentFinal) {
+                    finalText += currentFinal;
+                }
             };
 
             recognition.onerror = (event) => {
-                debug(`오류 발생: ${event.error}`);
+                console.error('Speech recognition error:', event.error);
                 
                 if (event.error === 'no-speech') {
-                    // 음성이 없어도 계속 대기
+                    // 음성이 없을 때는 무시
                     return;
                 }
                 
@@ -435,51 +404,102 @@
                     showError('네트워크 오류가 발생했습니다.');
                 } else if (event.error === 'not-allowed') {
                     showError('마이크 권한이 거부되었습니다.');
-                    shouldRestart = false;
+                    stopRecording();
                 }
             };
 
             recognition.onend = () => {
-                debug('음성 인식 종료됨');
-                
-                // 녹음 중이고 재시작해야 하는 경우
-                if (isRecording && shouldRestart) {
-                    debug('음성 인식 재시작 시도');
+                // 녹음 중이면 자동으로 재시작
+                if (isRecording) {
                     setTimeout(() => {
-                        if (isRecording && recognition) {
+                        if (isRecording) {
                             try {
                                 recognition.start();
                             } catch (e) {
-                                debug(`재시작 실패: ${e.message}`);
+                                console.log('Restarting recognition...');
                             }
                         }
-                    }, 100);
+                    }, 50);
                 }
             };
+
+            return true;
         }
 
-        // 녹음 UI 시작
-        function startRecordingUI() {
-            textInput.classList.add('recording');
-            micButton.classList.add('recording');
-            recordingUI.classList.add('active');
-            interimTextDiv.classList.add('active');
-            
-            // 타이머 시작
-            startTime = Date.now();
-            updateTimer();
-            timerInterval = setInterval(updateTimer, 100);
-            
-            // 오디오 시각화
-            startAudioVisualization();
+        // 녹음 시작
+        async function startRecording() {
+            if (!initRecognition()) {
+                return;
+            }
+
+            try {
+                // 마이크 권한 확인
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                
+                // 변수 초기화
+                isRecording = true;
+                finalText = '';
+                
+                // UI 업데이트
+                textInput.classList.add('recording');
+                micButton.classList.add('recording');
+                recordingUI.classList.add('active');
+                interimTextDiv.classList.add('active');
+                interimTextDiv.textContent = '음성을 입력하세요...';
+                
+                // 타이머 시작
+                startTime = Date.now();
+                updateTimer();
+                timerInterval = setInterval(updateTimer, 100);
+                
+                // 오디오 시각화 시작
+                startAudioVisualization();
+                
+                // 음성 인식 시작
+                recognition.start();
+                
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                if (error.name === 'NotAllowedError') {
+                    showError('마이크 권한이 거부되었습니다.');
+                } else {
+                    showError('마이크를 사용할 수 없습니다.');
+                }
+                stopRecording();
+            }
         }
 
-        // 녹음 UI 중지
-        function stopRecordingUI() {
+        // 녹음 중지
+        function stopRecording() {
+            isRecording = false;
+            
+            // 음성 인식 중지
+            if (recognition) {
+                recognition.stop();
+            }
+            
+            // 최종 텍스트 저장
+            const currentText = interimTextDiv.textContent;
+            if (currentText && currentText !== '음성을 입력하세요...') {
+                const existingText = textInput.value;
+                textInput.value = existingText ? 
+                    existingText + ' ' + currentText : 
+                    currentText;
+                
+                // 커서를 끝으로 이동
+                textInput.focus();
+                textInput.setSelectionRange(textInput.value.length, textInput.value.length);
+                
+                showSuccess('음성 입력이 완료되었습니다.');
+            }
+            
+            // UI 초기화
             textInput.classList.remove('recording');
             micButton.classList.remove('recording');
             recordingUI.classList.remove('active');
             interimTextDiv.classList.remove('active');
+            interimTextDiv.textContent = '';
             
             // 타이머 중지
             if (timerInterval) {
@@ -489,84 +509,9 @@
             
             // 오디오 시각화 중지
             stopAudioVisualization();
-        }
-
-        // 실시간 텍스트 업데이트
-        function updateInterimText() {
-            const displayText = accumulatedText + currentInterim;
-            interimTextDiv.textContent = displayText || '음성을 입력하세요...';
-        }
-
-        // 녹음 시작
-        async function startRecording() {
-            debug('녹음 시작 시도');
-            
-            // 초기화
-            accumulatedText = '';
-            currentInterim = '';
-            isRecording = true;
-            shouldRestart = true;
-            
-            try {
-                // 마이크 권한 요청
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                stream.getTracks().forEach(track => track.stop());
-                
-                // 음성 인식 시작
-                if (recognition) {
-                    recognition.start();
-                    debug('음성 인식 시작 명령 실행');
-                }
-            } catch (error) {
-                debug(`마이크 권한 오류: ${error.message}`);
-                if (error.name === 'NotAllowedError') {
-                    showError('마이크 권한이 거부되었습니다.');
-                } else {
-                    showError('마이크를 사용할 수 없습니다.');
-                }
-                isRecording = false;
-            }
-        }
-
-        // 녹음 중지 및 텍스트 저장
-        function stopAndSaveRecording() {
-            debug('녹음 중지 및 저장');
-            
-            isRecording = false;
-            shouldRestart = false;
-            
-            // 최종 텍스트 저장
-            const finalText = accumulatedText + currentInterim;
-            if (finalText.trim()) {
-                const currentValue = textInput.value;
-                textInput.value = currentValue ? 
-                    currentValue + ' ' + finalText.trim() : 
-                    finalText.trim();
-                
-                // 커서를 끝으로 이동
-                textInput.focus();
-                textInput.setSelectionRange(textInput.value.length, textInput.value.length);
-                
-                showSuccess('음성 입력이 완료되었습니다.');
-                debug(`저장된 텍스트: ${finalText.trim()}`);
-            }
-            
-            // UI 정리
-            stopRecordingUI();
-            
-            // 음성 인식 중지
-            if (recognition) {
-                try {
-                    recognition.stop();
-                } catch (e) {
-                    debug(`음성 인식 중지 오류: ${e.message}`);
-                }
-            }
             
             // 변수 초기화
-            accumulatedText = '';
-            currentInterim = '';
-            interimTextDiv.textContent = '';
+            finalText = '';
         }
 
         // 타이머 업데이트
@@ -577,7 +522,7 @@
             recordingTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
         }
 
-        // 오디오 시각화
+        // 오디오 시각화 시작
         async function startAudioVisualization() {
             try {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -585,13 +530,37 @@
                 analyser.fftSize = 256;
                 
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                microphone = audioContext.createMediaStreamSource(stream);
+                const microphone = audioContext.createMediaStreamSource(stream);
                 microphone.connect(analyser);
                 
-                dataArray = new Uint8Array(analyser.frequencyBinCount);
-                animateVoiceBars();
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                
+                function animate() {
+                    if (!isRecording) return;
+                    
+                    analyser.getByteFrequencyData(dataArray);
+                    
+                    voiceBars.forEach((bar, index) => {
+                        const start = Math.floor(index * dataArray.length / voiceBars.length);
+                        const end = Math.floor((index + 1) * dataArray.length / voiceBars.length);
+                        let sum = 0;
+                        
+                        for (let i = start; i < end; i++) {
+                            sum += dataArray[i];
+                        }
+                        
+                        const average = sum / (end - start);
+                        const height = Math.max(4, (average / 255) * 40);
+                        bar.style.height = `${height}px`;
+                    });
+                    
+                    animationId = requestAnimationFrame(animate);
+                }
+                
+                animate();
+                
             } catch (error) {
-                debug(`오디오 시각화 오류: ${error.message}`);
+                console.error('Audio visualization error:', error);
             }
         }
 
@@ -612,30 +581,7 @@
             });
         }
 
-        // 음성 막대 애니메이션
-        function animateVoiceBars() {
-            if (!analyser) return;
-            
-            analyser.getByteFrequencyData(dataArray);
-            
-            voiceBars.forEach((bar, index) => {
-                const start = Math.floor(index * dataArray.length / voiceBars.length);
-                const end = Math.floor((index + 1) * dataArray.length / voiceBars.length);
-                let sum = 0;
-                
-                for (let i = start; i < end; i++) {
-                    sum += dataArray[i];
-                }
-                
-                const average = sum / (end - start);
-                const height = Math.max(4, (average / 255) * 40);
-                bar.style.height = `${height}px`;
-            });
-            
-            animationId = requestAnimationFrame(animateVoiceBars);
-        }
-
-        // 상태 메시지
+        // 메시지 표시
         function showError(message) {
             statusMessage.className = 'status-message error';
             statusMessage.textContent = message;
@@ -659,18 +605,19 @@
             if (!isRecording) {
                 startRecording();
             } else {
-                stopAndSaveRecording();
+                stopRecording();
             }
         });
 
         completeButton.addEventListener('click', () => {
-            stopAndSaveRecording();
+            if (isRecording) {
+                stopRecording();
+            }
         });
 
-        // 초기화
-        document.addEventListener('DOMContentLoaded', () => {
-            initSpeechRecognition();
-            debug('앱 초기화 완료');
+        // 페이지 로드 시 초기화
+        window.addEventListener('load', () => {
+            console.log('Voice input app initialized');
         });
     </script>
 </body>
