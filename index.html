@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>음성 입력 텍스트 필드</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        /* 텍스트 입력 필드 컨테이너 */
+        .input-container {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .text-input {
+            width: 100%;
+            padding: 16px 50px 16px 16px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            outline: none;
+            transition: all 0.3s ease;
+            min-height: 56px;
+            resize: vertical;
+        }
+
+        .text-input:focus {
+            border-color: #2196F3;
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        }
+
+        /* 마이크 버튼 */
+        .mic-button {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: #f0f0f0;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .mic-button:hover {
+            background: #e0e0e0;
+        }
+
+        .mic-button:active {
+            transform: translateY(-50%) scale(0.95);
+        }
+
+        .mic-button.listening {
+            background: #f44336;
+            animation: pulse 1.5s infinite;
+        }
+
+        .mic-button svg {
+            width: 24px;
+            height: 24px;
+            fill: #666;
+            transition: fill 0.3s ease;
+        }
+
+        .mic-button.listening svg {
+            fill: white;
+        }
+
+        /* 음성 입력 모달 */
+        .voice-modal {
+            position: fixed;
+            bottom: -100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -2px 20px rgba(0,0,0,0.2);
+            padding: 30px;
+            transition: bottom 0.3s ease;
+            z-index: 1000;
+        }
+
+        .voice-modal.active {
+            bottom: 0;
+        }
+
+        .voice-modal-content {
+            text-align: center;
+        }
+
+        .voice-icon-large {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: #2196F3;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 1.5s infinite;
+        }
+
+        .voice-icon-large svg {
+            width: 48px;
+            height: 48px;
+            fill: white;
+        }
+
+        .voice-status {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .voice-text {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+            min-height: 24px;
+        }
+
+        .stop-button {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 12px 40px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .stop-button:hover {
+            background: #d32f2f;
+        }
+
+        .stop-button:active {
+            transform: scale(0.95);
+        }
+
+        /* 오버레이 */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 999;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* 애니메이션 */
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(33, 150, 243, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
+            }
+        }
+
+        /* 상태 메시지 */
+        .status-message {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status-message.error {
+            background: #ffebee;
+            color: #c62828;
+            display: block;
+        }
+
+        .status-message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            display: block;
+        }
+
+        /* 모바일 최적화 */
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>음성 입력 테스트</h1>
+        
+        <div class="status-message" id="statusMessage"></div>
+        
+        <div class="input-container">
+            <textarea 
+                class="text-input" 
+                id="textInput" 
+                placeholder="텍스트를 입력하거나 마이크를 눌러 음성으로 입력하세요"
+                rows="3"
+            ></textarea>
+            <button class="mic-button" id="micButton" aria-label="음성 입력">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+            </button>
+        </div>
+        
+        <p style="text-align: center; color: #666; font-size: 14px; margin-bottom: 20px;">
+            마이크 버튼을 눌러 음성 입력을 시작하세요
+        </p>
+        
+        <div style="background: #f0f7ff; padding: 15px; border-radius: 8px; margin-top: 20px;">
+            <p style="font-size: 14px; color: #1976d2; margin-bottom: 10px;">
+                <strong>테스트 전 확인사항:</strong>
+            </p>
+            <ul style="font-size: 13px; color: #555; margin-left: 20px;">
+                <li>HTTPS 환경에서만 작동합니다</li>
+                <li>Chrome, Edge, Safari 최신 버전 권장</li>
+                <li>처음 사용 시 마이크 권한 허용 필요</li>
+                <li>모바일: 브라우저 설정에서 마이크 권한 확인</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 오버레이 -->
+    <div class="overlay" id="overlay"></div>
+
+    <!-- 음성 입력 모달 -->
+    <div class="voice-modal" id="voiceModal">
+        <div class="voice-modal-content">
+            <div class="voice-icon-large">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+            </div>
+            <div class="voice-status" id="voiceStatus">음성을 입력하세요...</div>
+            <div class="voice-text" id="voiceText"></div>
+            <button class="stop-button" id="stopButton">음성 입력 완료</button>
+        </div>
+    </div>
+
+    <script>
+        // 음성 인식 API 지원 확인
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (!SpeechRecognition) {
+            document.getElementById('statusMessage').className = 'status-message error';
+            document.getElementById('statusMessage').textContent = '이 브라우저는 음성 인식을 지원하지 않습니다.';
+        }
+
+        // 요소 선택
+        const textInput = document.getElementById('textInput');
+        const micButton = document.getElementById('micButton');
+        const voiceModal = document.getElementById('voiceModal');
+        const overlay = document.getElementById('overlay');
+        const voiceStatus = document.getElementById('voiceStatus');
+        const voiceText = document.getElementById('voiceText');
+        const stopButton = document.getElementById('stopButton');
+        const statusMessage = document.getElementById('statusMessage');
+
+        let recognition;
+        let isListening = false;
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        // 음성 인식 초기화
+        function initSpeechRecognition() {
+            if (!SpeechRecognition) return;
+
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ko-KR'; // 한국어 설정
+            recognition.continuous = true; // 연속 음성 인식
+            recognition.interimResults = true; // 중간 결과 표시
+
+            recognition.onstart = () => {
+                isListening = true;
+                showVoiceModal();
+                voiceStatus.textContent = '음성을 입력하세요...';
+                voiceText.textContent = '';
+                micButton.classList.add('listening');
+            };
+
+            recognition.onresult = (event) => {
+                interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                // 실시간 텍스트 표시
+                voiceText.textContent = finalTranscript + interimTranscript;
+                
+                // 음성 인식 중 상태 업데이트
+                if (interimTranscript) {
+                    voiceStatus.textContent = '듣고 있습니다...';
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('음성 인식 오류:', event.error);
+                let errorMsg = '음성 인식 중 오류가 발생했습니다.';
+                
+                switch(event.error) {
+                    case 'no-speech':
+                        errorMsg = '음성이 감지되지 않았습니다.';
+                        break;
+                    case 'audio-capture':
+                        errorMsg = '마이크를 사용할 수 없습니다.';
+                        break;
+                    case 'not-allowed':
+                        errorMsg = '마이크 권한이 거부되었습니다.';
+                        break;
+                    case 'network':
+                        errorMsg = '네트워크 연결을 확인해주세요.';
+                        break;
+                }
+                
+                showError(errorMsg);
+                stopListening();
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                hideVoiceModal();
+                micButton.classList.remove('listening');
+                
+                // 최종 텍스트를 입력 필드에 추가
+                if (finalTranscript.trim()) {
+                    const currentText = textInput.value;
+                    textInput.value = currentText ? 
+                        currentText + ' ' + finalTranscript.trim() : 
+                        finalTranscript.trim();
+                    textInput.focus();
+                    showSuccess('음성 입력이 완료되었습니다.');
+                }
+                
+                // 변수 초기화
+                finalTranscript = '';
+                interimTranscript = '';
+            };
+        }
+
+        // 음성 인식 시작
+        async function startListening() {
+            if (!recognition) {
+                showError('음성 인식을 사용할 수 없습니다.');
+                return;
+            }
+
+            // 먼저 마이크 권한 확인 및 요청
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // 권한이 허용되면 스트림 즉시 종료
+                stream.getTracks().forEach(track => track.stop());
+                
+                // 음성 인식 시작
+                try {
+                    recognition.start();
+                } catch (error) {
+                    if (error.message.includes('already started')) {
+                        // 이미 시작된 경우 재시작
+                        recognition.stop();
+                        setTimeout(() => {
+                            recognition.start();
+                        }, 100);
+                    } else {
+                        console.error('음성 인식 시작 오류:', error);
+                        showError('음성 인식을 시작할 수 없습니다.');
+                    }
+                }
+            } catch (error) {
+                console.error('마이크 권한 오류:', error);
+                if (error.name === 'NotAllowedError') {
+                    showError('마이크 권한이 거부되었습니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
+                } else if (error.name === 'NotFoundError') {
+                    showError('마이크를 찾을 수 없습니다. 마이크가 연결되어 있는지 확인해주세요.');
+                } else {
+                    showError('마이크 접근 중 오류가 발생했습니다.');
+                }
+            }
+        }
+
+        // 음성 인식 중지
+        function stopListening() {
+            if (recognition && isListening) {
+                recognition.stop();
+            }
+        }
+
+        // 모달 표시
+        function showVoiceModal() {
+            voiceModal.classList.add('active');
+            overlay.classList.add('active');
+        }
+
+        // 모달 숨기기
+        function hideVoiceModal() {
+            voiceModal.classList.remove('active');
+            overlay.classList.remove('active');
+        }
+
+        // 상태 메시지 표시
+        function showError(message) {
+            statusMessage.className = 'status-message error';
+            statusMessage.textContent = message;
+            setTimeout(() => {
+                statusMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            statusMessage.className = 'status-message success';
+            statusMessage.textContent = message;
+            setTimeout(() => {
+                statusMessage.style.display = 'none';
+            }, 3000);
+        }
+
+        // 이벤트 리스너
+        micButton.addEventListener('click', () => {
+            if (!isListening) {
+                startListening();
+            }
+        });
+
+        stopButton.addEventListener('click', () => {
+            stopListening();
+        });
+
+        overlay.addEventListener('click', () => {
+            stopListening();
+        });
+
+        // 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            initSpeechRecognition();
+            
+            // HTTPS 확인
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                showError('음성 인식은 HTTPS 환경에서만 작동합니다.');
+            }
+        });
+    </script>
+</body>
+</html>
