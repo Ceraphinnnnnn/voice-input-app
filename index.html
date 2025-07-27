@@ -387,8 +387,8 @@
                 }
 
                 // 실시간 텍스트 표시
-                if (interimTranscript) {
-                    interimTextDiv.textContent = interimTranscript;
+                if (finalTranscript + interimTranscript) {
+                    interimTextDiv.textContent = finalTranscript + interimTranscript;
                     interimTextDiv.classList.add('active');
                 }
             };
@@ -417,20 +417,14 @@
             };
 
             recognition.onend = () => {
-                stopRecording();
-                
-                // 최종 텍스트를 입력 필드에 추가
-                if (finalTranscript.trim()) {
-                    const currentText = textInput.value;
-                    textInput.value = currentText ? 
-                        currentText + ' ' + finalTranscript.trim() : 
-                        finalTranscript.trim();
-                    showSuccess('음성 입력이 완료되었습니다.');
+                // 자동으로 재시작하여 연속 음성 인식 유지
+                if (isListening) {
+                    try {
+                        recognition.start();
+                    } catch (error) {
+                        console.log('음성 인식 재시작 중...');
+                    }
                 }
-                
-                // 변수 초기화
-                finalTranscript = '';
-                interimTranscript = '';
             };
         }
 
@@ -453,10 +447,23 @@
         // 녹음 중지
         function stopRecording() {
             isListening = false;
+            
+            // 최종 텍스트를 입력 필드에 추가
+            const allText = finalTranscript + interimTranscript;
+            if (allText.trim()) {
+                const currentText = textInput.value;
+                textInput.value = currentText ? 
+                    currentText + ' ' + allText.trim() : 
+                    allText.trim();
+                showSuccess('음성 입력이 완료되었습니다.');
+            }
+            
+            // UI 초기화
             textInput.classList.remove('recording');
             micButton.classList.remove('recording');
             recordingUI.classList.remove('active');
             interimTextDiv.classList.remove('active');
+            interimTextDiv.textContent = '';
             
             // 타이머 중지
             if (timerInterval) {
@@ -467,9 +474,18 @@
             // 오디오 시각화 중지
             stopAudioVisualization();
             
+            // 음성 인식 중지
             if (recognition) {
-                recognition.stop();
+                try {
+                    recognition.stop();
+                } catch (error) {
+                    console.log('음성 인식 중지 중...');
+                }
             }
+            
+            // 변수 초기화
+            finalTranscript = '';
+            interimTranscript = '';
         }
 
         // 타이머 업데이트
@@ -551,14 +567,27 @@
                 return;
             }
 
+            // 이전 텍스트 초기화
+            finalTranscript = '';
+            interimTranscript = '';
+
             try {
                 // 마이크 권한 확인
-                await navigator.mediaDevices.getUserMedia({ audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // 권한 획득 후 즉시 시작
+                stream.getTracks().forEach(track => track.stop());
+                
                 recognition.start();
             } catch (error) {
                 console.error('음성 인식 시작 오류:', error);
                 if (error.name === 'NotAllowedError') {
                     showError('마이크 권한이 거부되었습니다.');
+                } else if (error.message && error.message.includes('already started')) {
+                    // 이미 시작된 경우 재시작
+                    recognition.stop();
+                    setTimeout(() => {
+                        recognition.start();
+                    }, 100);
                 } else {
                     showError('음성 인식을 시작할 수 없습니다.');
                 }
